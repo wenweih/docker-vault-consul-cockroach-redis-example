@@ -8,8 +8,9 @@ services:
     command: start --insecure
     ports:
       - "8080:8080"
+      - "26257:26257"
     networks:
-      - roachnet
+      - tk_net
     volumes:
       # https://yeasy.gitbooks.io/docker_practice/compose/compose_file.html#volumes
       - ./data/roach/roach-ui:/cockroach/cockroach-data
@@ -20,7 +21,7 @@ services:
       - cockroach-ui
     command: start --insecure --join=tk_roach_ui
     networks:
-      - roachnet
+      - tk_net
     volumes:
       - ./data/roach/roach-one:/cockroach/cockroach-data
   roach-two:
@@ -30,7 +31,7 @@ services:
       - cockroach-ui
     command: start --insecure --join=tk_roach_ui
     networks:
-      - roachnet
+      - tk_net
     volumes:
       - ./data/roach/roach-two:/cockroach/cockroach-data
 
@@ -39,7 +40,7 @@ services:
     image: consul:latest
     container_name: 'tk_consul_agent_one'
     networks:
-      - consulnet
+      - tk_net
     command: "agent -retry-join consul-server-bootstrap -client 0.0.0.0 -bind 0.0.0.0"
     volumes:
       - ./data/consul/consul-agent-one:/consul/data
@@ -78,18 +79,23 @@ services:
       - "8600:8600"
       - "8600:8600/udp"
     command: "agent -server -bootstrap-expect 3 -ui -client 0.0.0.0 -bind 0.0.0.0"
+    volumes:
+      - ./data/consul/consul-server-bootstrap:/consul/data
   vault:
       container_name: tk_vault
       image: vault:latest
       networks:
-        - consulnet
+        - tk_net
       links:
         - consul-server-bootstrap
+        - consul-server-2
       depends_on:
         - consul-server-bootstrap
+        - consul-server-2
       ports:
         - "8200:8200"
       volumes:
+        # https://www.vaultproject.io/docs/configuration/storage/consul.html
         - ./script/vault.hcl:/vault/config/vault.hcl
         - ./data/vault/policies:/vault/policies
         - ./data/vault/data:/vault/data
@@ -98,17 +104,23 @@ services:
         - IPC_LOCK
       # command: "server -config=/vault/config/vault.hcl"
       command: "server"
+  redis:
+    container_name: 'tk_redis'
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
   db-init:
     # https://stackoverflow.com/questions/45884185/cockroachdb-docker-compose-script-with-sql-commands
     container_name: 'tk_db_init'
     image: cockroachdb/cockroach
     networks:
-      - roachnet
+      - tk_net
     volumes:
       - ./script/db_setup.sh:/db_setup.sh
     entrypoint: "/bin/bash"
     command: /db_setup.sh
 
 networks:
-  roachnet:
-  consulnet:
+  tk_net:
